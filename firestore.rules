@@ -1,0 +1,56 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+
+    // แอดมิน = เจ้าของระบบ (อีเมลด้านล่าง) หรือผู้ที่มี role == 'admin' ในเอกสาร users
+    function isOwner() {
+      return signedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in ['virach.va05@gmail.com'];   // <-- อีเมลแอดมิน (เจ้าของระบบ)
+    }
+    function isAdmin() {
+      return isOwner()
+        || (signedIn()
+            && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+            && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+    }
+    // ถ้าต้องการจำกัดเฉพาะอีเมลบริษัท ให้ใส่เงื่อนไขนี้ใน signedIn():
+    //   && request.auth.token.email.matches('.*@virach\\.co\\.th')
+
+    // ---------- โปรไฟล์พนักงาน ----------
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+      allow create: if signedIn() && request.auth.uid == uid
+                    && (request.resource.data.role == 'user' || isOwner());
+      allow create: if isAdmin();   // ให้แอดมินนำเข้า/กู้คืนโปรไฟล์พนักงานจากไฟล์สำรองได้
+      allow update: if signedIn()
+                    && ((request.auth.uid == uid && request.resource.data.role == resource.data.role) || isAdmin());
+    }
+
+    // ---------- ตั้งค่ากลาง (รายชื่อลูกค้า/วันหยุด/ชั่วโมงมาตรฐาน) ----------
+    match /config/{doc} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    // ---------- Time sheet รายเดือน (id = uid_ปีพ.ศ.-เดือน) ----------
+    match /timesheets/{id} {
+      allow get: if signedIn() && (id.matches(request.auth.uid + '_.*') || isAdmin());
+      allow list: if signedIn() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid
+                    && id.matches(request.auth.uid + '_.*')
+                    && request.resource.data.status in ['draft', 'submitted'];
+      allow create: if isAdmin();   // ให้แอดมินนำเข้า/กู้คืนใบลงเวลาจากไฟล์สำรองได้
+      allow update: if signedIn() && (
+                      (resource.data.uid == request.auth.uid
+                        && resource.data.status != 'approved'
+                        && request.resource.data.uid == resource.data.uid
+                        && request.resource.data.status in ['draft', 'submitted'])
+                      || isAdmin());
+      allow delete: if isAdmin();
+    }
+  }
+}
