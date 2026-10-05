@@ -15,7 +15,6 @@ export const firebaseConfig = {
   messagingSenderId: "322800576181",
   appId: "1:322800576181:web:2a8bc5310965a0895ac0fc"
 };
-*/
 
 /* อีเมลเจ้าของระบบ (แอดมินคนแรก) — ต้องตรงกับที่ระบุใน firestore.rules ด้วย */
 export const ADMIN_EMAILS = ['virach.va05@gmail.com'];
